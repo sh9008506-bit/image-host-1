@@ -1,210 +1,100 @@
-<!DOCTYPE html>
-<html lang="my">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Image Hosting Website</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            font-family: 'Pyidaungsu', sans-serif;
-        }
-        
-        body {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            padding: 20px;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-        }
-        
-        .container {
-            background: white;
-            border-radius: 15px;
-            padding: 40px;
-            width: 90%;
-            max-width: 600px;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
-            text-align: center;
-        }
-        
-        h1 {
-            color: #333;
-            margin-bottom: 20px;
-        }
-        
-        .upload-area {
-            border: 3px dashed #ddd;
-            border-radius: 10px;
-            padding: 40px 20px;
-            margin: 20px 0;
-            cursor: pointer;
-            transition: 0.3s;
-        }
-        
-        .upload-area:hover {
-            border-color: #667eea;
-            background: #f9f9ff;
-        }
-        
-        input[type="file"] {
-            width: 100%;
-            padding: 10px;
-            margin: 10px 0;
-        }
-        
-        button {
-            background: #667eea;
-            color: white;
-            border: none;
-            padding: 15px 30px;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 16px;
-            margin-top: 10px;
-        }
-        
-        button:hover {
-            background: #5a67d8;
-        }
-        
-        .result {
-            margin-top: 20px;
-            padding: 20px;
-            background: #f8f9fa;
-            border-radius: 10px;
-            text-align: left;
-            display: none;
-        }
-        
-        .result.show {
-            display: block;
-        }
-        
-        img {
-            max-width: 100%;
-            border-radius: 10px;
-            margin-top: 10px;
-        }
-        
-        .url-box {
-            background: white;
-            padding: 10px;
-            border-radius: 5px;
-            margin: 10px 0;
-            word-break: break-all;
-            border: 1px solid #ddd;
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1>🖼️ Image Hosting Website</h1>
-        <p>ပုံများကို အခမဲ့တင်ပြီး လင့်ခ်ရယူနိုင်ပါသည်</p>
-        
-        <div class="upload-area">
-            <h3>ပုံရွေးရန်</h3>
-            <input type="file" id="imageInput" accept="image/*">
-            <button onclick="uploadImage()">Upload Image</button>
-        </div>
-        
-        <div id="loading" style="display:none;">Uploading...</div>
-        
-        <div class="result" id="result">
-            <h3>✅ Upload Successful!</h3>
-            <p><strong>Image URL:</strong></p>
-            <div class="url-box" id="imageUrl"></div>
-            <button onclick="copyUrl()">Copy URL</button>
-            <div id="imagePreview"></div>
-        </div>
-    </div>
+const express = require('express');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
 
-    <script>
-        async function uploadImage() {
-            const fileInput = document.getElementById('imageInput');
-            const file = fileInput.files[0];
-            
-            if (!file) {
-                alert('Please select an image first');
-                return;
-            }
-            
-            // Check file size (5MB limit)
-            if (file.size > 5 * 1024 * 1024) {
-                alert('File size must be less than 5MB');
-                return;
-            }
-            
-            const formData = new FormData();
-            formData.append('image', file);
-            
-            document.getElementById('loading').style.display = 'block';
-            
-            try {
-                // Get the current domain
-                const baseUrl = window.location.origin;
-                const response = await fetch(baseUrl + '/upload', {
-                    method: 'POST',
-                    body: formData
-                });
-                
-                const data = await response.json();
-                document.getElementById('loading').style.display = 'none';
-                
-                if (data.success) {
-                    document.getElementById('imageUrl').textContent = data.url;
-                    document.getElementById('result').classList.add('show');
-                    
-                    // Show image preview
-                    document.getElementById('imagePreview').innerHTML = `
-                        <h4>Preview:</h4>
-                        <img src="${data.url}" alt="Uploaded Image">
-                    `;
-                } else {
-                    alert('Upload failed: ' + data.error);
-                }
-            } catch (error) {
-                document.getElementById('loading').style.display = 'none';
-                alert('Error: ' + error.message);
-            }
+const app = express();
+const PORT = process.env.PORT || 10000;
+
+// Create necessary folders
+if (!fs.existsSync('uploads')) {
+    fs.mkdirSync('uploads');
+    console.log('Created uploads folder');
+}
+
+if (!fs.existsSync('public')) {
+    fs.mkdirSync('public');
+    console.log('Created public folder');
+}
+
+// Create a simple index.html if it doesn't exist
+const indexPath = path.join(__dirname, 'public', 'index.html');
+if (!fs.existsSync(indexPath)) {
+    const simpleHtml = `
+    <!DOCTYPE html>
+    <html>
+    <head><title>Image Host</title></head>
+    <body>
+        <h1>Image Hosting Service</h1>
+        <p>Upload an image to get a shareable link</p>
+        <form action="/upload" method="POST" enctype="multipart/form-data">
+            <input type="file" name="image" accept="image/*">
+            <button type="submit">Upload</button>
+        </form>
+    </body>
+    </html>
+    `;
+    fs.writeFileSync(indexPath, simpleHtml);
+    console.log('Created default index.html');
+}
+
+// Multer setup
+const storage = multer.diskStorage({
+    destination: function (req, file, cb) {
+        cb(null, 'uploads/');
+    },
+    filename: function (req, file, cb) {
+        const uniqueName = Date.now() + '-' + Math.round(Math.random() * 1E9) + path.extname(file.originalname);
+        cb(null, uniqueName);
+    }
+});
+
+const upload = multer({ 
+    storage: storage,
+    limits: { fileSize: 5 * 1024 * 1024 } // 5MB
+});
+
+// Middleware
+app.use(express.static('public'));
+app.use('/uploads', express.static('uploads'));
+
+// Routes
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+app.post('/upload', upload.single('image'), (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({ error: 'No file uploaded' });
         }
         
-        function copyUrl() {
-            const url = document.getElementById('imageUrl').textContent;
-            navigator.clipboard.writeText(url).then(() => {
-                alert('URL copied to clipboard!');
-            });
-        }
+        // Create the URL
+        const protocol = req.headers['x-forwarded-proto'] || req.protocol;
+        const host = req.get('host');
+        const imageUrl = `${protocol}://${host}/uploads/${req.file.filename}`;
         
-        // Allow drag and drop
-        const uploadArea = document.querySelector('.upload-area');
-        const fileInput = document.getElementById('imageInput');
-        
-        uploadArea.addEventListener('click', () => {
-            fileInput.click();
+        res.json({
+            success: true,
+            message: 'Upload successful!',
+            filename: req.file.filename,
+            url: imageUrl,
+            size: (req.file.size / 1024).toFixed(2) + ' KB'
         });
-        
-        uploadArea.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            uploadArea.style.borderColor = '#667eea';
-        });
-        
-        uploadArea.addEventListener('dragleave', () => {
-            uploadArea.style.borderColor = '#ddd';
-        });
-        
-        uploadArea.addEventListener('drop', (e) => {
-            e.preventDefault();
-            uploadArea.style.borderColor = '#ddd';
-            const files = e.dataTransfer.files;
-            if (files.length > 0) {
-                fileInput.files = files;
-                alert('File selected: ' + files[0].name);
-            }
-        });
-    </script>
-</body>
-</html>
+    } catch (error) {
+        res.status(500).json({ error: 'Upload failed: ' + error.message });
+    }
+});
+
+// Health check
+app.get('/health', (req, res) => {
+    res.json({ status: 'OK', timestamp: new Date() });
+});
+
+// Start server
+app.listen(PORT, () => {
+    console.log(`✅ Server running on port ${PORT}`);
+    console.log(`📁 Uploads folder: ${__dirname}/uploads`);
+    console.log(`📁 Public folder: ${__dirname}/public`);
+    console.log(`🌐 Open: http://localhost:${PORT}`);
+});
